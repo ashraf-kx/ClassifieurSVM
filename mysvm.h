@@ -10,15 +10,12 @@
 #include <ctime>
 #include <iostream>
 
-//////////////////////// INCLUDE OPEN Computer Vision /////////////////////
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/ml//ml.hpp>
-////////////////////////            END               /////////////////////
+#include <QTextEdit>
+#include <opencv2/opencv.hpp>
 
-using namespace cv;
 using namespace std;
+using namespace cv;
+using namespace ml;
 
 #define	NTRAINING_SAMPLES	4			// Number of training samples per class
 #define FRAC_LINEAR_SEP		0.9f	    // Fraction of samples which compose the linear separable part
@@ -34,14 +31,16 @@ class mySVM : public QMainWindow
 public:
     explicit mySVM(QWidget *parent = 0);
     ~mySVM();
-    QImage Mat2QImage(cv::Mat const& src);
+    QImage mat2QImage(cv::Mat const& src);
 public slots:
-    Mat Run();
+    void run();
 private:
     Ui::mySVM *ui;
     QGraphicsScene *scene;
-    //QList<Vec3b> colors;
-
+    Ptr<SVM> svm;
+//    Ptr<TrainData> trainingData;
+//    QTextEdit *textEdit;
+//    QStringList logs;
 };
 
 #endif // MYSVM_H

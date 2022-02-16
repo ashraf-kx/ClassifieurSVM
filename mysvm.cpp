@@ -7,13 +7,19 @@ mySVM::mySVM(QWidget *parent) :
 {
     ui->setupUi(this);
     this->showMaximized();
-    //this->setWindowIcon(QIcon(":/Icons/IconAOCR.png"));
-    this->setWindowTitle("Simple Test SVM ");
+    //this->setWindowIcon(QIcon(":/assets/svm_icon.png"));
+    this->setWindowTitle("Simple test SVM");
     scene = new QGraphicsScene();
-    ui->actionRun_Training->setShortcut(Qt::Key_Enter);
-    connect(ui->actionRun_Training,SIGNAL(triggered()),this,SLOT(Run()));
-    connect(ui->Bt_trainSVM,SIGNAL(clicked()),this,SLOT(Run()));
+    svm = SVM::create();
 
+//    logs.clear();
+//    textEdit = new QTextEdit();
+//    ui->dockWidget->setMinimumHeight(100);
+//    ui->dockWidget->setWidget(textEdit);
+
+    ui->actionRunTraining->setShortcut(Qt::Key_Enter);
+
+    connect(ui->btnTrainSVM,SIGNAL(clicked()),this,SLOT(run()));   
 }
 
 mySVM::~mySVM()
@@ -21,142 +27,86 @@ mySVM::~mySVM()
     delete ui;
 }
 
-QImage mySVM::Mat2QImage(cv::Mat const& src)
+QImage mySVM::mat2QImage(cv::Mat const& src)
 {
-     cv::Mat temp; // make the same cv::Mat
-     cvtColor(src, temp,CV_BGR2RGB); // cvtColor Makes a copt, that what i need
+     Mat temp;
+     cvtColor(src, temp,CV_BGR2RGB);
      QImage dest((const uchar *) temp.data, temp.cols, temp.rows, temp.step, QImage::Format_RGB888);
      dest.bits(); // enforce deep copy, see documentation
      // of QImage::QImage ( const uchar * data, int width, int height, Format format )
      return dest;
 }
 
-Mat mySVM::Run()
-{
-    // Portion Of Code that we will start with for the instance  "WE 'RE LATE" [07_04_2015]. FEELING SHITTY.
+void mySVM::run()
+{    
+    // Set up training data.
+    int trainingSampleCount = ui->vectorsCount->text().toInt();
+    Mat trainingData(trainingSampleCount,2,CV_32FC1);
 
-    // Data for visual representation
-    const int WIDTH = 700, HEIGHT = 700;
-    Mat I = Mat::zeros(HEIGHT, WIDTH, CV_8UC3);
-
-    // Simplicity [ Train DATA ]
-    int nbrTrainSample = ui->LE_vector_nbr->text().toInt();
-    Mat trainData(nbrTrainSample,2,CV_32FC1);   // [ Xpos, Ypos ].
     srand((int)time(0));
-    for(int i=0; i< nbrTrainSample; i++)
+    int min = 0;
+    int max = 700;
+    for(int i=0; i< trainingSampleCount; i++)
     {
-        trainData.at<float>(i,0) = ((rand() % 1000) + 1)/2;
-        trainData.at<float>(i,1)  =  ((rand() % 1000) + 1)/2;
+        trainingData.at<float>(i,0) = min + rand() % (( max + 1 ) - min);
+        trainingData.at<float>(i,1) = min + rand() % (( max + 1 ) - min);
     }
 
-    Mat labels(nbrTrainSample,1,CV_32FC1);
-    int nbrClass = ui->LE_class_nbr->text().toInt();
-    for(int i=0; i< labels.rows;)
-    {
-        for (int j = 0; j < nbrClass; j++)
+    Mat labels(trainingSampleCount, 1, CV_32SC1);
+
+    // each training sample must have a label (labels in this example varie betwen 1 or -1).
+    for(int i=0; i< trainingSampleCount; i++) {
+        labels.at<int>(i) = (min + rand() % (( max + 1 ) - min)) > (max/2) ? 1 : -1;
+        qDebug()<<"{"<<trainingData.at<float>(i,0)<<","<<trainingData.at<float>(i,1)<<"}"<<" labeled ["<<labels.at<int>(i)<<"]";
+    }
+
+    // Train the SVM.
+    svm->setType(SVM::C_SVC);
+    svm->setKernel(ui->svmKernalType->currentIndex());
+    svm->setGamma(ui->svmGamma->text().toInt());
+    svm->setC(ui->svmC->text().toInt());
+    svm->setDegree(ui->svmDegree->text().toInt());
+    svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER, 100, 1e-6));
+    qDebug()<<"New SVM parameters is adjusted.";
+
+    svm->train(trainingData, ROW_SAMPLE, labels);
+
+    // Data for visual representation.
+    int width = max, height = max;
+    Mat image = Mat::zeros(height, width, CV_8UC3);
+
+    // Show the decision regions given by the SVM.
+    Vec3b green(0,255,0), blue(255,0,0);
+    for (int i = 0; i < image.rows; i++)
+        for (int j = 0; j < image.cols; j++)
         {
-            labels.at<float>(i,0) = j;
-            i++;
-            if(i >= labels.rows ) break;
-        }
-    }
-
-    // --------------------- 2. Set Up Parametres SVM -------------------------------------------
-    CvSVMParams params;
-    params.svm_type    = SVM::C_SVC;
-    params.kernel_type = ui->CB_type->currentIndex();
-    params.C           = ui->LE_c_value->text().toInt();
-    params.degree      = ui->LE_degree_value->text().toInt();
-    params.term_crit   = TermCriteria(CV_TERMCRIT_ITER, (int)1e7, 1e-6);
-
-    //------------------------ 3. Train The SVM --------------------------------------------------
-    cout << "Starting training process" << endl;
-    CvSVM svm;
-    std::cout<<trainData<<endl;
-    std::cout<<labels<<endl;
-    svm.train(trainData, labels, Mat(), Mat(), params);
-    cout << "Finished training process" << endl;
-
-    //------------------------ 4. Show The Decision Regions ----------------------------------------
-    QList<Vec3b> colors;
-    colors.clear();
-    colors<<Vec3b(255,255,255);
-    colors<<Vec3b(255,255,49);
-    colors<<Vec3b(79,238,255);
-    colors<<Vec3b(255,155,212);
-    colors<<Vec3b(152,255,124);
-    colors<<Vec3b(255,255,50);
-
-
-    for (int i = 0; i < ui->LE_class_nbr->text().toInt(); ++i) {
-        srand((int)time(0));
-        unsigned char r = 255 * (rand()/(1.0 + RAND_MAX));
-        unsigned char g = 255 * (rand()/(1.0 + RAND_MAX));
-        unsigned char b = 255 * (rand()/(1.0 + RAND_MAX));
-        Vec3b col(r,g,b);
-        colors<<col;
-    }
-
-    for (int i = 0; i < I.rows; i++)
-        for (int j = 0; j < I.cols; j++)
-        {
-            Mat sampleMat = (Mat_<float>(1,2) << i, j);
-            float response = svm.predict(sampleMat);
-            for (int k = 0; k < (int)response; k++) {
-                I.at<Vec3b>(j,i)  = colors.at(k);
-            }
+            Mat sampleMat = (Mat_<float>(1,2) << j,i);
+            float response = svm->predict(sampleMat);
+            if (response == 1)
+                image.at<Vec3b>(i,j)  = green;
+            else if (response == -1)
+                image.at<Vec3b>(i,j)  = blue;
         }
 
-    //----------------------- 5. Show the training data --------------------------------------------
-    int thick = -3;
-    int lineType = 5;
-    float px, py;
+    // Show the training data
+    int thickness = -1;
+    for(int i=0; i< trainingSampleCount; i++)
+        circle(image, Point(trainingData.at<float>(i,0), trainingData.at<float>(i,1)), 5, Scalar(255, 255, 255), thickness);
 
-    QList<Scalar> Colors2;
-    Colors2.clear();
-    Colors2<<Scalar(0,255,0);
-    Colors2<<Scalar(0,0,255);
-    Colors2<<Scalar(255,0,0);
-    Colors2<<Scalar(50,50,50);
-    Colors2<<Scalar(100,150,100);
-    Colors2<<Scalar(255,50,255);
-    /*
-    for (int i = 0; i < ui->LE_class_nbr->text().toInt(); ++i) {
-        srand((int)time(0));
-        unsigned char r = 255 * (rand()/(1.0 + RAND_MAX));
-        unsigned char g = 255 * (rand()/(1.0 + RAND_MAX));
-        unsigned char b = 255 * (rand()/(1.0 + RAND_MAX));
-        Colors2<<Scalar(b,r,g);
-    }*/
-    for (int i = 0; i < nbrTrainSample; )
+    // Show support vectors
+    thickness = 2;
+    Mat sv = svm->getUncompressedSupportVectors();
+    for (int i = 0; i < sv.rows; i++)
     {
-        for (int k = 0; k < ui->LE_class_nbr->text().toInt(); k++)
-        {
-            px = trainData.at<float>(i,0);
-            py = trainData.at<float>(i,1);
-            circle(I, Point( (int) px,  (int) py ), 3, Colors2.at(k), thick, lineType);
-            i++;
-            if(i >= nbrTrainSample ) break;
-        }
+        const float* v = sv.ptr<float>(i);
+        circle(image, Point((int) v[0], (int) v[1]), 6, Scalar(128, 128, 128), thickness);
     }
 
-    //------------------------- 6. Show support vectors --------------------------------------------
-    thick = 1;
-    lineType  = 8;
-    int x     = svm.get_support_vector_count();
-    std::cout<<"number of support vectors : "<<x<<endl;
-    for (int i = 0; i < x; ++i)
-    {
-        const float* v = svm.get_support_vector(i);
-        std::cout<<"x : "<<(int) v[0]<<".     Y : "<<(int) v[1]<<endl;
-        circle( I,  Point( (int) v[0], (int) v[1]), 3, Scalar(48, 193, 255), thick, lineType);
-    }
-    imwrite("Last_Example.png",I);
     scene->clear();
-    scene->addPixmap(QPixmap::fromImage(Mat2QImage(I)));
+    scene->addPixmap(QPixmap::fromImage(mat2QImage(image)));
     ui->graphicsView->setScene(scene);
     ui->graphicsView->update();
-
-// END First Sample.
-    return I;
+//    const QString out;
+//    qDebug()>>out;
+//    textEdit->setText(out);
 }
