@@ -83,9 +83,9 @@ void mySVM::run()
             Mat sampleMat = (Mat_<float>(1,2) << j,i);
             float response = svm->predict(sampleMat);
             if (response == 1)
-                image.at<Vec3b>(i,j)  = green;
+                image.at<Vec3b>(i,j) = green;
             else if (response == -1)
-                image.at<Vec3b>(i,j)  = blue;
+                image.at<Vec3b>(i,j) = blue;
         }
 
     // Show the training data
